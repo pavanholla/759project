@@ -1,45 +1,26 @@
 #include <complex>
 #include <iostream>
 #include <valarray>
+#include <vector>
  
+#define NBPSC 2
+#define NSC 64 
+#define NCBPS  128
+
+
 const double PI = 3.141592653589793238460;
 using namespace std;
 typedef std::complex<double> Complex;
-typedef std::valarray<Complex> CArray;
- 
-//// Cooley–Tukey FFT (in-place, divide-and-conquer)
-//// Higher memory requirements and redundancy although more intuitive
-//void fft(CArray& x)
-//{
-//    const size_t N = x.size();
-//    if (N <= 1) return;
-// 
-//    // divide
-//    CArray even = x[std::slice(0, N/2, 2)];
-//    CArray  odd = x[std::slice(1, N/2, 2)];
-// 
-//    // conquer
-//    fft(even);
-//    fft(odd);
-// 
-//    // combine
-//    for (size_t k = 0; k < N/2; ++k)
-//    {
-//        Complex t = std::polar(1.0, -2 * PI * k / N) * odd[k];
-//        x[k    ] = even[k] + t;
-//        x[k+N/2] = even[k] - t;
-//    }
-//}
- 
-// Cooley-Tukey FFT (in-place, breadth-first, decimation-in-frequency)
-// Better optimized but less intuitive
-// !!! Warning : in some cases this code make result different from not optimased version above (need to fix bug)
-// The bug is now fixed @2017/05/30 
-void fft(CArray &x)
+typedef std::valarray<Complex> Complex_array;
+
+void print_array( int x[],int size)  {
+  for(int ii=0 ; ii<size; ii++) cout<<x[ii];
+}
+void fft(Complex x[])
 {
 	// DFT
-	unsigned int N = x.size(), k = N, n;
-	double thetaT = 3.14159265358979323846264338328L / N;
+	unsigned int N = NSC, k = N, n;
+	double thetaT = 3.141592653589793238462/ N;
 	Complex phiT = Complex(cos(thetaT), -sin(thetaT)), T;
 	while (k > 1)
 	{
@@ -77,27 +58,8 @@ void fft(CArray &x)
 			x[b] = t;
 		}
 	}
-	//// Normalize (This section make it not working correctly)
-	//Complex f = 1.0 / sqrt(N);
-	//for (unsigned int i = 0; i < N; i++)
-	//	x[i] *= f;
 }
  
-// inverse fft (in-place)
-void ifft(CArray& x)
-{
-    // conjugate the complex numbers
-    x = x.apply(std::conj);
- 
-    // forward fft
-    fft( x );
- 
-    // conjugate the complex numbers again
-    x = x.apply(std::conj);
- 
-    // scale the numbers
-    x /= x.size();
-}
 void generate_frame(int data[],int size)  {
   for(int ii=0; ii<size; ii++)  {
     data[ii]=rand()%2;
@@ -105,9 +67,9 @@ void generate_frame(int data[],int size)  {
 }
 
 void scramble(int data[], int size, bool init_scrambler=false )  {
-  static int xor_sequence[128];
+  static int xor_sequence[NCBPS];
   if(init_scrambler)  {
-    for(int ii=0; ii<128; ii++)  {
+    for(int ii=0; ii<NCBPS; ii++)  {
       xor_sequence[ii]=rand()%2;
     } 
   }
@@ -159,34 +121,36 @@ void encode(int data[], int size, int encoded_data[])  {
 //48  288 6
 //54  288 6
 void interleave( int data[], int size, int interleaved_data[])  {
-  int NCBPS = 96;
-  int NBPSC = 2; 
-  //int s=((NBPSC/2)>1) ?  (NBPSC/2):1 ;
+  //int s=((NBPSC/2)>1) ?  (NBPSC/2):1 
   int s = 1;
-  for(int k=0 ; k < size; k++)  {  
-    int i = (NCBPS/16) * (k % 16) + (floor(k/16)) ;
-    int j = s * floor(i/s) + ((int)(i + NBPSC- floor(16 * i/NCBPS)) % s);
-    interleaved_data[j] = data[k];
+  cout<<"Interleaving";
+  for(int ii=0; ii<size; ii++) cout<<data[ii];
+  for (int symbol_no =0; symbol_no< size/NCBPS; symbol_no++)  {
+    for(int k=0 ; k < NCBPS; k++)  {  
+      int i = (NCBPS/16) * (k % 16) + (floor(k/16)) ;
+      int j = s * floor(i/s) + ((int)(i + NBPSC- floor(16 * i/NCBPS)) % s);
+      interleaved_data[symbol_no*NCBPS + j] = data[symbol_no*NCBPS + k];
+    }
   }
 }
 //modulator
-void modulate ( int data[], int size, Complex modulated_data[] )  {
-  int NBPSC = 2; 
-  for(int ii=0; ii< size/NBPSC ; ii++)  {
-    
-  modulated_data[ii] =  Complex (data[2*ii],data[2*ii + 1] );
+void modulate ( int data[], int size, Complex modulated_data[][NSC] )  {
+  cout<<"Modulating";
+  for(int symbol_num=0; symbol_num< size/NCBPS; symbol_num++)  {
+    for(int ii=0; ii<  NSC*NBPSC ; ii+=1)  {
+      modulated_data[symbol_num][ii] =  Complex (2*data[2*ii+symbol_num*NSC*NBPSC] -1 ,2 * data[2*ii + 1 + symbol_num*NSC*NBPSC] -1 );
+    }  
   }
 }
 //fft
  
-void perform_fft_per_symbol ( Complex modulated_data[], int size )  {
-  for(int ii =0 ;ii< size/64; ii++) {
-    CArray data(modulated_data[ii*64], 64);
-    std::cout << modulated_data[ii] << std::endl;
-    fft(data);
-    for (int i = 0; i < 64; ++i)  {
-        std::cout << data[i] << std::endl;
-     }
+void perform_fft_per_symbol ( Complex modulated_data[][NSC], int size )  {
+  for(int ii =0 ;ii< size/NSC/NBPSC; ii++) {
+    for(int jj=0; jj<NSC; jj++) cout << modulated_data[ii][jj]<<endl;
+    cout << "pre Symbol complete";
+    fft(modulated_data[ii]);
+    for(int jj=0; jj<NSC; jj++) cout << modulated_data[ii][jj]<<endl;
+    cout << "Symbol complete";
   }
 }
 int main()
@@ -195,33 +159,12 @@ int main()
   int frame[1024];
   int encoded_frame[1024*2];
   int interleaved_frame[1024*2];
-  Complex modulated_frame[1024];
+  Complex modulated_frame[1024/NSC][NSC];
   generate_frame(frame,frame_size);
+  scramble(frame,frame_size,true);
   encode(frame,frame_size,encoded_frame);
   interleave(encoded_frame,frame_size*2,interleaved_frame);
   modulate(interleaved_frame,frame_size*2,modulated_frame);
   perform_fft_per_symbol(modulated_frame, frame_size);
-//   const Complex test[] = { 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0 };
-//
-//    
-//    CArray data(test, 8);
-// 
-//    // forward fft
-//    fft(data);
-// 
-//    std::cout << "fft" << std::endl;
-//    for (int i = 0; i < 8; ++i)
-//    {
-//        std::cout << data[i] << std::endl;
-//    }
-// 
-//    // inverse fft
-//    ifft(data);
-// 
-//    std::cout << std::endl << "ifft" << std::endl;
-//    for (int i = 0; i < 8; ++i)
-//    {
-//        std::cout << data[i] << std::endl;
-//    }
-    return 0;
+  return 0;
 }
