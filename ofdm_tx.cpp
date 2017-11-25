@@ -2,6 +2,7 @@
 #include <iostream>
 #include <valarray>
 #include <vector>
+#include <bitset>
  
 #define NBPSC 2
 #define NSC 64 
@@ -16,6 +17,7 @@ typedef std::valarray<Complex> Complex_array;
 void print_array( int x[],int size)  {
   for(int ii=0 ; ii<size; ii++) cout<<x[ii];
 }
+//substitute cuda here ( optionally vectorized fft)
 void fft(Complex x[])
 {
 	// DFT
@@ -61,6 +63,7 @@ void fft(Complex x[])
 }
  
 void generate_frame(int data[],int size)  {
+  //parallel for
   for(int ii=0; ii<size; ii++)  {
     data[ii]=rand()%2;
   }
@@ -72,14 +75,17 @@ void scramble(int data[], int size, bool init_scrambler=false )  {
     for(int ii=0; ii<NCBPS; ii++)  {
       xor_sequence[ii]=rand()%2;
     } 
-  }
+  } else  {
   
-  for(int ii=0; ii<size; ii++)  {
-    data[ii] ^= xor_sequence[ii];
+  //parallel for
+    for(int ii=0; ii<size; ii++)  {
+      data[ii] ^= xor_sequence[ii%NCBPS];
+    } 
   }
 }
 //encoder
 void encode(int data[], int size, int encoded_data[])  {
+  //can be sped up by performing encoding on a symbol by symbol basis
   int shift_reg[] = {0,0,0,0,0,0};
   int b0; int b1;
   for(int ii=0; ii<size;ii++)  {
@@ -123,8 +129,11 @@ void encode(int data[], int size, int encoded_data[])  {
 void interleave( int data[], int size, int interleaved_data[])  {
   //int s=((NBPSC/2)>1) ?  (NBPSC/2):1 
   int s = 1;
+  #ifdef debug_print
   cout<<"Interleaving";
   for(int ii=0; ii<size; ii++) cout<<data[ii];
+  #endif
+  //parallel for
   for (int symbol_no =0; symbol_no< size/NCBPS; symbol_no++)  {
     for(int k=0 ; k < NCBPS; k++)  {  
       int i = (NCBPS/16) * (k % 16) + (floor(k/16)) ;
@@ -135,7 +144,10 @@ void interleave( int data[], int size, int interleaved_data[])  {
 }
 //modulator
 void modulate ( int data[], int size, Complex modulated_data[][NSC] )  {
+  #ifdef debug_print
   cout<<"Modulating";
+  #endif
+  //parallel for
   for(int symbol_num=0; symbol_num< size/NCBPS; symbol_num++)  {
     for(int ii=0; ii<  NSC*NBPSC ; ii+=1)  {
       modulated_data[symbol_num][ii] =  Complex (2*data[2*ii+symbol_num*NSC*NBPSC] -1 ,2 * data[2*ii + 1 + symbol_num*NSC*NBPSC] -1 );
@@ -145,26 +157,40 @@ void modulate ( int data[], int size, Complex modulated_data[][NSC] )  {
 //fft
  
 void perform_fft_per_symbol ( Complex modulated_data[][NSC], int size )  {
+  //parallel for
   for(int ii =0 ;ii< size/NSC/NBPSC; ii++) {
+    #ifdef debug_print
     for(int jj=0; jj<NSC; jj++) cout << modulated_data[ii][jj]<<endl;
     cout << "pre Symbol complete";
+    #endif
     fft(modulated_data[ii]);
+    #ifdef debug_print
     for(int jj=0; jj<NSC; jj++) cout << modulated_data[ii][jj]<<endl;
     cout << "Symbol complete";
+    #endif
   }
 }
-int main()
+#define FRAME_SIZE 4096*8*7
+int main(int argc, char* argv[])
 { 
-  int frame_size = 1024;
-  int frame[1024];
-  int encoded_frame[1024*2];
-  int interleaved_frame[1024*2];
-  Complex modulated_frame[1024/NSC][NSC];
-  generate_frame(frame,frame_size);
-  scramble(frame,frame_size,true);
-  encode(frame,frame_size,encoded_frame);
-  interleave(encoded_frame,frame_size*2,interleaved_frame);
-  modulate(interleaved_frame,frame_size*2,modulated_frame);
-  perform_fft_per_symbol(modulated_frame, frame_size);
+
+    int frame_size = FRAME_SIZE;
+    int frame[FRAME_SIZE];
+    int encoded_frame[FRAME_SIZE];
+    int interleaved_frame[FRAME_SIZE*2];
+    Complex modulated_frame[FRAME_SIZE/NSC][NSC];
+    
+    int num_frames = 100;
+    if(argc>1) num_frames = atoi ( argv[1]);
+  //parallel for
+    scramble(frame,frame_size,true); 
+    for(int ii =0 ; ii <num_frames; ii++)  {
+      generate_frame(frame,frame_size);
+      scramble(frame,frame_size,false); 
+      encode(frame,frame_size,encoded_frame);
+      interleave(encoded_frame,frame_size*2,interleaved_frame);
+      modulate(interleaved_frame,frame_size*2,modulated_frame);
+      perform_fft_per_symbol(modulated_frame, frame_size);
+    }
   return 0;
 }
