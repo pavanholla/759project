@@ -26,7 +26,8 @@ all : problem1
 
 
 problem1:  
-	gcc -g $(CXXSTD) -lm -lstdc++ ofdm_tx.cpp	
+	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ ofdm_tx.cpp -o single_thread.out
+	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ -fopenmp ofdm_tx.cpp -o openmp.out
 	#module load cuda;nvcc -o problem1 $(OPT) problem1.cu -ccbin $(BIN)
 	#module load cuda;nvcc -o problem2 $(OPT) vector_reduction.cu vector_reduction_gold.cpp -ccbin $(BIN)
 	#module load cuda;nvcc -o problem3 $(OPT) problem3.cu -ccbin $(BIN)

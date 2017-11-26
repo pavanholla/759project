@@ -3,6 +3,8 @@
 #include <valarray>
 #include <vector>
 #include <bitset>
+#include "stopwatch.hpp"
+#include <omp.h>
  
 #define NBPSC 2
 #define NSC 64 
@@ -13,6 +15,8 @@ const double PI = 3.141592653589793238460;
 using namespace std;
 typedef std::complex<double> Complex;
 typedef std::valarray<Complex> Complex_array;
+
+stopwatch<std::milli, float> sw;
 
 void print_array( int x[],int size)  {
   for(int ii=0 ; ii<size; ii++) cout<<x[ii];
@@ -64,6 +68,7 @@ void fft(Complex x[])
  
 void generate_frame(int data[],int size)  {
   //parallel for
+  #pragma omp parallel for num_threads(20) schedule(dynamic) 
   for(int ii=0; ii<size; ii++)  {
     data[ii]=rand()%2;
   }
@@ -78,6 +83,7 @@ void scramble(int data[], int size, bool init_scrambler=false )  {
   } else  {
   
   //parallel for
+  #pragma omp parallel for num_threads(20) schedule(dynamic) 
     for(int ii=0; ii<size; ii++)  {
       data[ii] ^= xor_sequence[ii%NCBPS];
     } 
@@ -134,6 +140,7 @@ void interleave( int data[], int size, int interleaved_data[])  {
   for(int ii=0; ii<size; ii++) cout<<data[ii];
   #endif
   //parallel for
+  #pragma omp parallel for num_threads(20) schedule(static) 
   for (int symbol_no =0; symbol_no< size/NCBPS; symbol_no++)  {
     for(int k=0 ; k < NCBPS; k++)  {  
       int i = (NCBPS/16) * (k % 16) + (floor(k/16)) ;
@@ -148,6 +155,7 @@ void modulate ( int data[], int size, Complex modulated_data[][NSC] )  {
   cout<<"Modulating";
   #endif
   //parallel for
+  #pragma omp parallel for num_threads(20) schedule(static) 
   for(int symbol_num=0; symbol_num< size/NCBPS; symbol_num++)  {
     for(int ii=0; ii<  NSC*NBPSC ; ii+=1)  {
       modulated_data[symbol_num][ii] =  Complex (2*data[2*ii+symbol_num*NSC*NBPSC] -1 ,2 * data[2*ii + 1 + symbol_num*NSC*NBPSC] -1 );
@@ -158,6 +166,8 @@ void modulate ( int data[], int size, Complex modulated_data[][NSC] )  {
  
 void perform_fft_per_symbol ( Complex modulated_data[][NSC], int size )  {
   //parallel for
+  
+  #pragma omp parallel for num_threads(20) schedule(auto) 
   for(int ii =0 ;ii< size/NSC/NBPSC; ii++) {
     #ifdef debug_print
     for(int jj=0; jj<NSC; jj++) cout << modulated_data[ii][jj]<<endl;
@@ -180,17 +190,31 @@ int main(int argc, char* argv[])
     int interleaved_frame[FRAME_SIZE*2];
     Complex modulated_frame[FRAME_SIZE/NSC][NSC];
     
-    int num_frames = 100;
+    float generate_time= 0, scramble_time=0, encode_time=0, interleave_time=0, modulate_time = 0, fft_time=0 ; 
+    int num_frames = 10;
     if(argc>1) num_frames = atoi ( argv[1]);
   //parallel for
-    scramble(frame,frame_size,true); 
+    scramble(frame,frame_size,true); //initialize scrambler
     for(int ii =0 ; ii <num_frames; ii++)  {
+      sw.start();
       generate_frame(frame,frame_size);
+      sw.stop(); generate_time += sw.count(); sw.start();
       scramble(frame,frame_size,false); 
+      sw.stop(); scramble_time += sw.count(); sw.start();
       encode(frame,frame_size,encoded_frame);
+      sw.stop(); encode_time += sw.count(); sw.start();
       interleave(encoded_frame,frame_size*2,interleaved_frame);
+      sw.stop(); interleave_time += sw.count(); sw.start();
       modulate(interleaved_frame,frame_size*2,modulated_frame);
+      sw.stop(); modulate_time += sw.count(); sw.start();
       perform_fft_per_symbol(modulated_frame, frame_size);
+      sw.stop(); fft_time += sw.count();
     }
+    cout<< " generate_time " << generate_time << endl;
+    cout<< " scramble_time " << scramble_time << endl;
+    cout<< " encode_time " << encode_time << endl;
+    cout<< " interleave_time " << interleave_time << endl;
+    cout<< " modulate_time " << modulate_time << endl;
+    cout<< " fft_time " << fft_time << endl;
   return 0;
 }
