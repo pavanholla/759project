@@ -196,11 +196,13 @@ void perform_fft_per_symbol ( Complex modulated_data[][NSC], int size )  {
 
 //CUDA SECTION
     Complex *dA;
-    cudaMalloc((Complex*) &dA, sizeof(Complex));
+    cudaMalloc((void**)&dA, sizeof(Complex));
+    cudaMemcpy(dA, modulated_data[ii],sizeof(Complex), cudaMemcpyHostToDevice);
     const int threadsPerBlock = 5;
     const int blocksPerGrid = 1;
-    fft_cuda<<<blocksPerGrid,threadsPerBlock>>>();
-    fft(modulated_data[ii]);
+    fft_cuda<<<blocksPerGrid,threadsPerBlock>>>(dA);
+    cudaMemCpy(modulated_data[ii], dA, sizeof(Complex), cudaMemcpyDeviceToHost);
+    //fft(modulated_data[ii]);
     #ifdef debug_print
     for(int jj=0; jj<NSC; jj++) cout << modulated_data[ii][jj]<<endl;
     cout << "Symbol complete";
