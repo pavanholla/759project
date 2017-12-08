@@ -21,18 +21,21 @@ debug : LDFLAGS := -fsanitize=address
 debug : ARCH :=
 debug : $(EXEC)
 
-all : problem1
+all : single omp_parallel cuda_parallel
 
 
 
-problem1:  
+single:  
 	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ ofdm_tx.cpp -o single_thread_out
-	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ -fopenmp ofdm_tx.cpp -o openmp_out -DOMP -DOMP_ENCODE_PARALLEL
-	module load cuda;nvcc -o cuda_fft $(OPT) ofdm_tx.cu -ccbin $(BIN)
 	#module load cuda;nvcc -o problem2 $(OPT) vector_reduction.cu vector_reduction_gold.cpp -ccbin $(BIN)
 	#module load cuda;nvcc -o problem3 $(OPT) problem3.cu -ccbin $(BIN)
 
+omp_parallel:  
+	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ -fopenmp ofdm_tx.cpp -o openmp_out -DOMP -DOMP_ENCODE_PARALLEL
 
+cuda_parallel:  
+	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ ofdm_tx.cpp -o single_thread_out
+	module load cuda;nvcc -o cuda_fft $(OPT) ofdm_tx.cu -ccbin $(BIN)
 
 # TODO: add targets for building executables
 
