@@ -7,6 +7,12 @@
 #include <cuda.h>
 //#include <omp.h>
 #include <cufft.h>
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include <thrust/copy.h>
+#include <thrust/scan.h>
+#include <vector>
+#include <curand.h>
  
 #define NBPSC 2
 #define NSC 64 
@@ -68,7 +74,19 @@ void fft(Complex x[])
 		}
 	}
 }
+
+__global__ void init_stuff(curandState *state) {
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    currand_init(1337, idx, 0, &state[idx]);
+}
  
+__global__ void generate_frame_cuda(curandState *state, int *rand) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    rand[idx] = curand_uniform(&state[idx]);
+}
+
+
+
 void generate_frame(int data[],int size)  {
   //parallel for
   //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
@@ -222,7 +240,10 @@ int main(int argc, char* argv[])
 { 
 
     int frame_size = FRAME_SIZE;
-    int frame[FRAME_SIZE];
+    //thrust::host_vector<int> frame_t(frame_size);
+    //std::vector<int> myvector(frame_size);
+    //int *frame = thrust::raw_pointer_cast(&frame_t[0]);
+    int *frame[FRAME_SIZE];
     int encoded_frame[FRAME_SIZE];
     int interleaved_frame[FRAME_SIZE*2];
     Complex modulated_frame[FRAME_SIZE/NSC][NSC];
@@ -236,8 +257,26 @@ int main(int argc, char* argv[])
     scramble(frame,frame_size,true); //initialize scrambler
     for(int ii =0 ; ii <num_frames; ii++)  {
       sw.start();
-      generate_frame(frame,frame_size);
+      //thrust::generate(frame_t.begin(),frame_t.end(),rand);
+      curandState *d_state;
+      int *d_frame;
+      cudaMalloc((void**)&d_frame,sizeof(int)*frame_size);
+      cudaMemcpy(d_frame,frame,sizeof(int)*frame_size,cudaMemcpyHostToDevice);
+      init_stuff<<<frame_size/128,128>>>(d_state);
+
+      generate_frame_cuda<<<frame_size/128,128>>>(d_state,d_frame);
+
       sw.stop(); generate_time += sw.count(); sw.start();
+      cudaFree(d_state);
+      cudaMemcpy(frame,d_frame,sizeof(int)*frame_size,cudaMemcpyDeviceToHost);
+      cudaFree(d_frame);
+
+      //thrust::copy(frame_t.begin(),frame_t.end(),myvector.begin());
+      //frame = myvector.data();
+      
+      // cuda thrust implementation to generate fram
+      //thrust::generate(frame_t.begin(),frame_t.end(),rand);
+      //generate_frame(frame,frame_size);
       scramble(frame,frame_size,false); 
       sw.stop(); scramble_time += sw.count(); sw.start();
       #ifdef OMP_ENCODE_PARALLEL
