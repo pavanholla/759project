@@ -9,6 +9,8 @@ ARCH   	:= -march=native
 CCSTD	:= -std=c99
 CXXSTD	:= -std=c++11
 
+EXEC := single_thread_out openmp_out cuda_fft 
+
 # Linker options
 LDOPT 	:= $(OPT)
 LDFLAGS := 
@@ -21,24 +23,23 @@ debug : LDFLAGS := -fsanitize=address
 debug : ARCH :=
 debug : $(EXEC)
 
-all : single omp_parallel cuda_parallel
+all : $(EXEC)
 
 
+#module load cuda;nvcc -o problem2 $(OPT) vector_reduction.cu vector_reduction_gold.cpp -ccbin $(BIN)
+#module load cuda;nvcc -o problem3 $(OPT) problem3.cu -ccbin $(BIN)
 
-single:  
+single_thread_out: ofdm_tx.cpp
 	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ ofdm_tx.cpp -o single_thread_out
-	#module load cuda;nvcc -o problem2 $(OPT) vector_reduction.cu vector_reduction_gold.cpp -ccbin $(BIN)
-	#module load cuda;nvcc -o problem3 $(OPT) problem3.cu -ccbin $(BIN)
 
-omp_parallel:  
+openmp_out: ofdm_tx.cpp
 	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ -fopenmp ofdm_tx.cpp -o openmp_out -DOMP -DOMP_ENCODE_PARALLEL
 
-cuda_parallel:  
-	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ ofdm_tx.cpp -o single_thread_out
-	module load cuda;nvcc -o cuda_fft $(OPT) ofdm_tx.cu -ccbin $(BIN)
+cuda_fft: ofdm_tx.cu
+	module load cuda;nvcc -o cuda_fft -O1 ofdm_tx.cu --ptxas-options=-v --use_fast_math -lcufft -ccbin $(BIN)
 
 # TODO: add targets for building executables
 
 .PHONY: clean
 clean:
-	rm -f problem1
+	rm -f single_thread_out openmp_out cuda_fft

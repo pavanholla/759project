@@ -73,6 +73,8 @@ void generate_frame(int data[],int size)  {
   //parallel for
   //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
   for(int ii=0; ii<size; ii++)  {
+    //one block per 128 numbers
+    //num_blocks=size/128
     #ifdef OMP
     unsigned int myseed = omp_get_thread_num();
     data[ii]=rand_r(&myseed)%2;
@@ -84,24 +86,27 @@ void generate_frame(int data[],int size)  {
 
 void scramble(int data[], int size, bool init_scrambler=false )  {
   static int xor_sequence[NCBPS];
+  //one block per 128 numbers  
   if(init_scrambler)  {
     for(int ii=0; ii<NCBPS; ii++)  {
-      xor_sequence[ii]=rand()%2;
+      xor_sequence[ii]=rand()%2;//hardcode for cuda, input ot kernel
     } 
   } else  {
   
   //parallel for
   //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
     for(int ii=0; ii<size; ii++)  {
-      data[ii] ^= xor_sequence[ii%NCBPS];
+      data[ii] ^= xor_sequence[ii%NCBPS];//merge with generate_frame kernel
     } 
   }
 }
 //encoder
 void encode(int data[], int size, int encoded_data[], int shift_reg[], int start=0)  {
+  //convolution
   //can be sped up by performing encoding on a symbol by symbol basis
   //int b0; int b1;
   for(int ii=start; ii<size;ii++)  {
+    //convolution
     encoded_data[2*ii]= data[ii] ^ shift_reg[1] ^ shift_reg[2] ^ shift_reg[4] ^ shift_reg[5];
     encoded_data[2*ii+1]= data[ii] ^ shift_reg[0] ^ shift_reg[1] ^ shift_reg[2] ^ shift_reg[5];
     for(int jj=6; jj>0; jj--)  {
@@ -164,6 +169,7 @@ void interleave( int data[], int size, int interleaved_data[])  {
   //parallel for
   //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
   for (int symbol_no =0; symbol_no< size/NCBPS; symbol_no++)  {
+    //one block per symbol. 128 bits get arranged in rows of 16 each, and are read out column wise, perhaps gather
     for(int k=0 ; k < NCBPS; k++)  {  
       int i = (NCBPS/16) * (k % 16) + (floor(k/16)) ;
       int j = s * floor(i/s) + ((int)(i + NBPSC- floor(16 * i/NCBPS)) % s);
@@ -190,17 +196,27 @@ void perform_fft_per_symbol ( Complex modulated_data[][NSC], int size )  {
   //parallel for
   
   //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
-  for(int ii =0 ;ii< size/NSC/NBPSC; ii++) {
+  for(int ii =0 ;ii< size/NSC/NBPSC; ii++) { //for each symbol
     #ifdef debug_print
     for(int jj=0; jj<NSC; jj++) cout << modulated_data[ii][jj]<<endl;
     cout << "pre Symbol complete";
     #endif
-    fft(modulated_data[ii]);
+    // cuda implementation
+
+     //cuda implementation ended
+    //cufftExecC2C(plan, (cufftComplex *)d_modulatedFrame+ii*64,(cufftComplex *)d_modulatedFrame+ii*64,CUFFT_FORWARD);
+
+    
+    
+    
+    
+    //fft(modulated_data[ii]);
     #ifdef debug_print
     for(int jj=0; jj<NSC; jj++) cout << modulated_data[ii][jj]<<endl;
     cout << "Symbol complete";
     #endif
   }
+
 }
 int main(int argc, char* argv[])
 { 
@@ -233,13 +249,25 @@ int main(int argc, char* argv[])
       interleave(encoded_frame,frame_size*2,interleaved_frame);
       sw.stop(); interleave_time += sw.count(); sw.start();
       modulate(interleaved_frame,frame_size*2,modulated_frame);
-      sw.stop(); modulate_time += sw.count(); sw.start();
-      // cuda implementation
-      cufftHandle plan;
-      cufftPlan2d(&plan,(FRAME_SIZE/NSC),(NSC),CUFFT_C2C);
-      //
+      sw.stop(); modulate_time += sw.count();  
+     
+        Complex *d_modulatedFrame;
+        cudaMalloc((void**)&d_modulatedFrame,sizeof(Complex)*frame_size);
+        cudaMemcpy(d_modulatedFrame,modulated_frame,sizeof(Complex)*frame_size,cudaMemcpyHostToDevice);
+        cufftHandle plan;
+        cufftPlan1d(&plan,NSC,CUFFT_C2C,frame_size/64);
+
+
+        sw.start();
+
+
+        cufftExecC2C(plan, (cufftComplex *)d_modulatedFrame,(cufftComplex *)d_modulatedFrame,CUFFT_FORWARD);
       //perform_fft_per_symbol(modulated_frame, frame_size);
-      sw.stop(); fft_time += sw.count();
+        sw.stop(); fft_time += sw.count();
+
+        cudaMemcpy(modulated_frame,d_modulatedFrame,sizeof(Complex)*frame_size,cudaMemcpyDeviceToHost);
+        cudaFree(d_modulatedFrame);
+        cufftDestroy(plan);
     }
     cout<< " generate_time " << generate_time << endl;
     cout<< " scramble_time " << scramble_time << endl;
