@@ -4,7 +4,9 @@
 #include <vector>
 #include <bitset>
 #include "stopwatch.hpp"
-#include <omp.h>
+#include <cuda.h>
+//#include <omp.h>
+#include <cufft.h>
  
 #define NBPSC 2
 #define NSC 64 
@@ -69,7 +71,7 @@ void fft(Complex x[])
  
 void generate_frame(int data[],int size)  {
   //parallel for
-  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
+  //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
   for(int ii=0; ii<size; ii++)  {
     #ifdef OMP
     unsigned int myseed = omp_get_thread_num();
@@ -89,7 +91,7 @@ void scramble(int data[], int size, bool init_scrambler=false )  {
   } else  {
   
   //parallel for
-  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
+  //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
     for(int ii=0; ii<size; ii++)  {
       data[ii] ^= xor_sequence[ii%NCBPS];
     } 
@@ -98,7 +100,7 @@ void scramble(int data[], int size, bool init_scrambler=false )  {
 //encoder
 void encode(int data[], int size, int encoded_data[], int shift_reg[], int start=0)  {
   //can be sped up by performing encoding on a symbol by symbol basis
-  int b0; int b1;
+  //int b0; int b1;
   for(int ii=start; ii<size;ii++)  {
     encoded_data[2*ii]= data[ii] ^ shift_reg[1] ^ shift_reg[2] ^ shift_reg[4] ^ shift_reg[5];
     encoded_data[2*ii+1]= data[ii] ^ shift_reg[0] ^ shift_reg[1] ^ shift_reg[2] ^ shift_reg[5];
@@ -116,7 +118,7 @@ void encode_parallel(int data[], int size, int encoded_data_t0[])  {
     
 //   encode(data+ENCODE_CHUNK, ENCODE_CHUNK , encoded_data_t0);
 //  int encoded_data_t0[ENCODE_CHUNK*2];
-  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) default(shared) 
+  //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) default(shared) 
   for(int ii=0;ii<NUM_THREADS;ii++)  {
     int shift_reg_c[]={0,0,0,0,0,0};
     int *shift_reg=shift_reg_c;
@@ -160,7 +162,7 @@ void interleave( int data[], int size, int interleaved_data[])  {
   for(int ii=0; ii<size; ii++) cout<<data[ii];
   #endif
   //parallel for
-  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
+  //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
   for (int symbol_no =0; symbol_no< size/NCBPS; symbol_no++)  {
     for(int k=0 ; k < NCBPS; k++)  {  
       int i = (NCBPS/16) * (k % 16) + (floor(k/16)) ;
@@ -175,7 +177,7 @@ void modulate ( int data[], int size, Complex modulated_data[][NSC] )  {
   cout<<"Modulating";
   #endif
   //parallel for
-  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
+  //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
   for(int symbol_num=0; symbol_num< size/NCBPS; symbol_num++)  {
     for(int ii=0; ii<  NSC*NBPSC ; ii+=1)  {
       modulated_data[symbol_num][ii] =  Complex (2*data[2*ii+symbol_num*NSC*NBPSC] -1 ,2 * data[2*ii + 1 + symbol_num*NSC*NBPSC] -1 );
@@ -187,7 +189,7 @@ void modulate ( int data[], int size, Complex modulated_data[][NSC] )  {
 void perform_fft_per_symbol ( Complex modulated_data[][NSC], int size )  {
   //parallel for
   
-  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
+  //#pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
   for(int ii =0 ;ii< size/NSC/NBPSC; ii++) {
     #ifdef debug_print
     for(int jj=0; jj<NSC; jj++) cout << modulated_data[ii][jj]<<endl;
@@ -232,7 +234,11 @@ int main(int argc, char* argv[])
       sw.stop(); interleave_time += sw.count(); sw.start();
       modulate(interleaved_frame,frame_size*2,modulated_frame);
       sw.stop(); modulate_time += sw.count(); sw.start();
-      perform_fft_per_symbol(modulated_frame, frame_size);
+      // cuda implementation
+      cufftHandle plan;
+      cufftPlan2d(&plan,(FRAME_SIZE/NSC),(NSC),CUFFT_C2C);
+      //
+      //perform_fft_per_symbol(modulated_frame, frame_size);
       sw.stop(); fft_time += sw.count();
     }
     cout<< " generate_time " << generate_time << endl;
