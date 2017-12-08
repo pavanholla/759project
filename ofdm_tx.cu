@@ -15,7 +15,8 @@ const double PI = 3.141592653589793238460;
 using namespace std;
 typedef std::complex<double> Complex;
 typedef std::valarray<Complex> Complex_array;
-
+int NUM_THREADS = 2;
+#define FRAME_SIZE 4096*8*7
 stopwatch<std::milli, float> sw;
 
 void print_array( int x[],int size)  {
@@ -68,7 +69,7 @@ void fft(Complex x[])
  
 void generate_frame(int data[],int size)  {
   //parallel for
-  #pragma omp parallel for num_threads(20) schedule(static) 
+  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
   for(int ii=0; ii<size; ii++)  {
     #ifdef OMP
     unsigned int myseed = omp_get_thread_num();
@@ -88,18 +89,17 @@ void scramble(int data[], int size, bool init_scrambler=false )  {
   } else  {
   
   //parallel for
-  #pragma omp parallel for num_threads(20) schedule(static) 
+  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
     for(int ii=0; ii<size; ii++)  {
       data[ii] ^= xor_sequence[ii%NCBPS];
     } 
   }
 }
 //encoder
-void encode(int data[], int size, int encoded_data[])  {
+void encode(int data[], int size, int encoded_data[], int shift_reg[], int start=0)  {
   //can be sped up by performing encoding on a symbol by symbol basis
-  int shift_reg[] = {0,0,0,0,0,0};
   int b0; int b1;
-  for(int ii=0; ii<size;ii++)  {
+  for(int ii=start; ii<size;ii++)  {
     encoded_data[2*ii]= data[ii] ^ shift_reg[1] ^ shift_reg[2] ^ shift_reg[4] ^ shift_reg[5];
     encoded_data[2*ii+1]= data[ii] ^ shift_reg[0] ^ shift_reg[1] ^ shift_reg[2] ^ shift_reg[5];
     for(int jj=6; jj>0; jj--)  {
@@ -112,41 +112,17 @@ void encode(int data[], int size, int encoded_data[])  {
   
 }
 
-#define FRAME_SIZE 4096*8*7
-#define MAX_ENCODE_THREADS 2
-#define ENCODE_CHUNK FRAME_SIZE/MAX_ENCODE_THREADS
-#define SHIFT_REG_DEPTH 8
-#define MAX_ENCODE_SUB_THREADS SHIFT_REG_DEPTH
-void encode_parallel_sub(int data[], int size)  {
-  int encoded_data[SHIFT_REG_DEPTH][ENCODE_CHUNK*2];
-  int shift_reg[SHIFT_REG_DEPTH][64];
-  #pragma omp parallel for num_threads(MAX_ENCODE_SUB_THREADS) schedule(static) default(shared)
-  for(int lsfr=0; lsfr<SHIFT_REG_DEPTH; lsfr++)  {
-    int lsfr_temp =lsfr;
-    for(int ii=0; ii<6;ii++) {
-      shift_reg[lsfr][ii] = lsfr_temp%2;
-      lsfr_temp/=2;
-    }
-    for(int ii=0; ii<size;ii++)  {
-      encoded_data[lsfr][2*ii]= data[ii] ^ shift_reg[lsfr][1] ^ shift_reg[lsfr][2] ^ shift_reg[lsfr][4] ^ shift_reg[lsfr][5];
-      encoded_data[lsfr][2*ii+1]= data[ii] ^ shift_reg[lsfr][0] ^ shift_reg[lsfr][1] ^ shift_reg[lsfr][2] ^ shift_reg[lsfr][5];
-      for(int jj=6; jj>0; jj--)  {
-        shift_reg[lsfr][jj] = shift_reg[lsfr] [jj-1];
-      }
-      
-      shift_reg[lsfr][0] = data[ii];
-    }
-  }
-} 
-#define ENCODE_SPLIT 1
-#define ENCODE_ORDER 64
 void encode_parallel(int data[], int size, int encoded_data_t0[])  {
     
 //   encode(data+ENCODE_CHUNK, ENCODE_CHUNK , encoded_data_t0);
 //  int encoded_data_t0[ENCODE_CHUNK*2];
-  #pragma omp parallel for num_threads(1+ENCODE_ORDER*ENCODE_SPLIT) schedule(static) default(shared)
-  for(int ii=0;ii<1+ENCODE_ORDER*ENCODE_SPLIT;ii++)  {
-    encode(data, ENCODE_CHUNK , encoded_data_t0);//only an approximation of time taken due to memory constraints in encode_parallel_sub
+  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) default(shared) 
+  for(int ii=0;ii<NUM_THREADS;ii++)  {
+    int shift_reg_c[]={0,0,0,0,0,0};
+    int *shift_reg=shift_reg_c;
+    if(ii>0)
+      shift_reg = data + ii*size/NUM_THREADS;
+    encode(data, size/NUM_THREADS , encoded_data_t0,shift_reg, ii*size/NUM_THREADS);
   }
 
 }
@@ -184,7 +160,7 @@ void interleave( int data[], int size, int interleaved_data[])  {
   for(int ii=0; ii<size; ii++) cout<<data[ii];
   #endif
   //parallel for
-  #pragma omp parallel for num_threads(20) schedule(static) 
+  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
   for (int symbol_no =0; symbol_no< size/NCBPS; symbol_no++)  {
     for(int k=0 ; k < NCBPS; k++)  {  
       int i = (NCBPS/16) * (k % 16) + (floor(k/16)) ;
@@ -199,7 +175,7 @@ void modulate ( int data[], int size, Complex modulated_data[][NSC] )  {
   cout<<"Modulating";
   #endif
   //parallel for
-  #pragma omp parallel for num_threads(20) schedule(static) 
+  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
   for(int symbol_num=0; symbol_num< size/NCBPS; symbol_num++)  {
     for(int ii=0; ii<  NSC*NBPSC ; ii+=1)  {
       modulated_data[symbol_num][ii] =  Complex (2*data[2*ii+symbol_num*NSC*NBPSC] -1 ,2 * data[2*ii + 1 + symbol_num*NSC*NBPSC] -1 );
@@ -211,7 +187,7 @@ void modulate ( int data[], int size, Complex modulated_data[][NSC] )  {
 void perform_fft_per_symbol ( Complex modulated_data[][NSC], int size )  {
   //parallel for
   
-  #pragma omp parallel for num_threads(20) schedule(static) 
+  #pragma omp parallel for num_threads(NUM_THREADS) schedule(static) 
   for(int ii =0 ;ii< size/NSC/NBPSC; ii++) {
     #ifdef debug_print
     for(int jj=0; jj<NSC; jj++) cout << modulated_data[ii][jj]<<endl;
@@ -233,9 +209,11 @@ int main(int argc, char* argv[])
     int interleaved_frame[FRAME_SIZE*2];
     Complex modulated_frame[FRAME_SIZE/NSC][NSC];
     
+    int shift_reg[] = {0,0,0,0,0,0};
     float generate_time= 0, scramble_time=0, encode_time=0, encode_parallel_time=0, interleave_time=0, modulate_time = 0, fft_time=0 ; 
     int num_frames = 10;
     if(argc>1) num_frames = atoi ( argv[1]);
+    if(argc>2) NUM_THREADS = atoi ( argv[2]);
   //parallel for
     scramble(frame,frame_size,true); //initialize scrambler
     for(int ii =0 ; ii <num_frames; ii++)  {
@@ -248,7 +226,7 @@ int main(int argc, char* argv[])
       encode_parallel(frame,frame_size,encoded_frame);
       sw.stop(); encode_parallel_time += sw.count(); sw.start();
       #endif
-      encode(frame,frame_size,encoded_frame);
+      encode(frame,frame_size,encoded_frame,shift_reg);
       sw.stop(); encode_time += sw.count(); sw.start();
       interleave(encoded_frame,frame_size*2,interleaved_frame);
       sw.stop(); interleave_time += sw.count(); sw.start();
