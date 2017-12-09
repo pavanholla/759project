@@ -9,7 +9,7 @@ ARCH   	:= -march=native
 CCSTD	:= -std=c99
 CXXSTD	:= -std=c++11
 
-EXEC := single_thread_out openmp_out cuda_fft 
+EXEC := single_thread_out openmp_out #cuda_fft 
 
 # Linker options
 LDOPT 	:= $(OPT)
@@ -32,8 +32,8 @@ all : $(EXEC)
 single_thread_out: ofdm_tx.cpp
 	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ ofdm_tx.cpp -o single_thread_out
 
-openmp_out: ofdm_tx.cpp
-	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ -fopenmp ofdm_tx.cpp -o openmp_out -DOMP -DOMP_ENCODE_PARALLEL
+openmp_out: ofdm_openmp.cpp
+	gcc -g $(CXXSTD) -lm  -fopt-info -lstdc++ -fopenmp ofdm_openmp.cpp -o openmp_out -DOMP -DOMP_ENCODE_PARALLEL
 
 cuda_fft: ofdm_tx.cu
 	module load cuda;nvcc -o cuda_fft -O1 ofdm_tx.cu --ptxas-options=-v --use_fast_math -lcufft -ccbin $(BIN)
