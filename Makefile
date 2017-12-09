@@ -9,7 +9,7 @@ ARCH   	:= -march=native
 CCSTD	:= -std=c99
 CXXSTD	:= -std=c++11
 
-EXEC := single_thread_out openmp_out #cuda_fft 
+EXEC := single_thread_out openmp_out cuda_fft cuda_fft_part1
 
 # Linker options
 LDOPT 	:= $(OPT)
@@ -38,10 +38,9 @@ openmp_out: ofdm_openmp.cpp
 cuda_fft: ofdm_tx.cu
 	module load cuda;nvcc -o cuda_fft -O1 ofdm_tx.cu --ptxas-options=-v --use_fast_math -lcufft -ccbin $(BIN)
 
-problem1a: problem1a.cu
-	module load cuda;nvcc -o problem1a -O1 problem1a.cu --ptxas-options=-v --use_fast_math -lcufft -ccbin $(BIN)
-# TODO: add targets for building executables
+cuda_fft_part1: cuda_fft_part1.cu
+	module load cuda;nvcc -o cuda_fft_part1 -O1 cuda_fft_part1.cu --ptxas-options=-v --use_fast_math -lcufft -ccbin $(BIN)
 
 .PHONY: clean
 clean:
-	rm -f single_thread_out openmp_out cuda_fft
+	rm -f single_thread_out openmp_out cuda_fft cuda_fft_part1

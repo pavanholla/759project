@@ -75,16 +75,6 @@ void fft(Complex x[])
 	}
 }
 
-__global__ void init_stuff(curandState *state) {
-    int idx = blockIdx.x*blockDim.x + threadIdx.x;
-    currand_init(1337, idx, 0, &state[idx]);
-}
- 
-__global__ void generate_frame_cuda(curandState *state, int *rand) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    rand[idx] = curand_uniform(&state[idx]);
-}
-
 
 
 void generate_frame(int data[],int size)  {
@@ -257,26 +247,13 @@ int main(int argc, char* argv[])
     scramble(frame,frame_size,true); //initialize scrambler
     for(int ii =0 ; ii <num_frames; ii++)  {
       sw.start();
-      //thrust::generate(frame_t.begin(),frame_t.end(),rand);
-      curandState *d_state;
-      int *d_frame;
-      cudaMalloc((void**)&d_frame,sizeof(int)*frame_size);
-      cudaMemcpy(d_frame,frame,sizeof(int)*frame_size,cudaMemcpyHostToDevice);
-      init_stuff<<<frame_size/128,128>>>(d_state);
-
-      generate_frame_cuda<<<frame_size/128,128>>>(d_state,d_frame);
-
-      sw.stop(); generate_time += sw.count(); sw.start();
-      cudaFree(d_state);
-      cudaMemcpy(frame,d_frame,sizeof(int)*frame_size,cudaMemcpyDeviceToHost);
-      cudaFree(d_frame);
 
       //thrust::copy(frame_t.begin(),frame_t.end(),myvector.begin());
       //frame = myvector.data();
       
       // cuda thrust implementation to generate fram
       //thrust::generate(frame_t.begin(),frame_t.end(),rand);
-      //generate_frame(frame,frame_size);
+      generate_frame(frame,frame_size);
       scramble(frame,frame_size,false); 
       sw.stop(); scramble_time += sw.count(); sw.start();
       #ifdef OMP_ENCODE_PARALLEL
@@ -308,12 +285,12 @@ int main(int argc, char* argv[])
         cudaFree(d_modulatedFrame);
         cufftDestroy(plan);
     }
-    cout<< " generate_time " << generate_time << endl;
-    cout<< " scramble_time " << scramble_time << endl;
-    cout<< " encode_time " << encode_time << endl;
-    cout<< " encode_parallel_time " << encode_parallel_time << endl;
-    cout<< " interleave_time " << interleave_time << endl;
-    cout<< " modulate_time " << modulate_time << endl;
+    //cout<< " generate_time " << generate_time << endl;
+    //cout<< " scramble_time " << scramble_time << endl;
+    //cout<< " encode_time " << encode_time << endl;
+    //cout<< " encode_parallel_time " << encode_parallel_time << endl;
+    //cout<< " interleave_time " << interleave_time << endl;
+    //cout<< " modulate_time " << modulate_time << endl;
     cout<< " fft_time " << fft_time << endl;
   return 0;
 }

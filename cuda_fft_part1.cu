@@ -20,23 +20,24 @@ typedef std::complex<double> Complex;
 using namespace std;
 __global__ void init(unsigned int seed, curandState_t* states) {
 
-  /* we have to initialize the state */
-  curand_init(seed, /* the seed can be the same for each core, here we pass the time in from the CPU */
-              blockIdx.x*blockDim.x+threadIdx.x, /* the sequence number should be different for each core (unless you want all
-                             cores to get the same sequence of numbers for some reason - use thread id! */
-              0, /* the offset is how much extra we advance in the sequence for each call, can be 0 */
-              &states[blockIdx.x]);
+     /* we have to initialize the state */
+     curand_init(seed, /* the seed can be the same for each core, here we pass the time in from the CPU */
+                blockIdx.x*blockDim.x+threadIdx.x, /* the sequence number should be different for each core (unless you want all
+                cores to get the same sequence of numbers for some reason - use thread id! */
+                0, /* the offset is how much extra we advance in the sequence for each call, can be 0 */
+                &states[blockIdx.x]);
 }
+
 
 /* this GPU kernel takes an array of states, and an array of ints, and puts a random int into each */
 __global__ void randoms(curandState_t* states, int* numbers) {
-  /* curand works like rand - except that it takes a state as a parameter */
-  numbers[blockIdx.x*blockDim.x+threadIdx.x] = curand(&states[blockIdx.x*blockDim.x+threadIdx.x]) % 2;
+    /* curand works like rand - except that it takes a state as a parameter */
+    numbers[blockIdx.x*blockDim.x+threadIdx.x] = curand(&states[blockIdx.x*blockDim.x+threadIdx.x]) % 2;
 }
 
 __global__ void scramble(int* numbers,int *scrambler_bits) {
-  /* curand works like rand - except that it takes a state as a parameter */
-  numbers[blockIdx.x*blockDim.x+threadIdx.x] ^=scrambler_bits[ (blockIdx.x*blockDim.x+threadIdx.x) % 128];
+    /* curand works like rand - except that it takes a state as a parameter */
+     numbers[blockIdx.x*blockDim.x+threadIdx.x] ^=scrambler_bits[ (blockIdx.x*blockDim.x+threadIdx.x) % 128];
 }
 
 
@@ -44,11 +45,12 @@ int checkResults(int startElem, int endElem, float* cudaRes, float* res)
 {
     int nDiffs=0;
     const float smallVal = 0.0001f;
-    for(int i=startElem; i<endElem; i++)
+    for(int i=startElem; i<endElem; i++) {
         if(fabs(cudaRes[i]-res[i])>smallVal) {
             nDiffs++;
             std::cout << i << std::endl;
         }
+    }
     return nDiffs;
 }
 
@@ -166,48 +168,48 @@ int main(int argc, char* argv[]) {
     int *interleaved_frame;
     cuDoubleComplex *modulated_frame;
 
-  cudaEvent_t startevent, stopevent;
-  cudaEventCreate(&startevent);
-  cudaEventCreate(&stopevent);
-  cudaEventRecord(startevent,0);  
+    cudaEvent_t startevent, stopevent;
+    cudaEventCreate(&startevent);
+    cudaEventCreate(&stopevent);
+    cudaEventRecord(startevent,0);  
 
-  curandState_t* states;
-  /* allocate space on the GPU for the random states */
-  cudaMalloc((void**) &states, FRAME_SIZE * sizeof(curandState_t));
-  /* invoke the GPU to initialize all of the random states */
-  init<<<FRAME_SIZE/128, 128>>>(1000, states);
+    curandState_t* states;
+    /* allocate space on the GPU for the random states */
+    cudaMalloc((void**) &states, FRAME_SIZE * sizeof(curandState_t));
+    /* invoke the GPU to initialize all of the random states */
+    init<<<FRAME_SIZE/128, 128>>>(1000, states);
 
-  cudaMalloc((void**) &scrambler_bits, 128 * sizeof(int));
-  randoms<<<1, 128>>>(states, scrambler_bits);
-  /* allocate an array of unsigned ints on the CPU and GPU */
-  cudaMalloc((void**) &frame, FRAME_SIZE * sizeof(int));
-  cudaMalloc((void**) &encoded_frame, 2*FRAME_SIZE * sizeof(int));
-  cudaMalloc((void**) &interleaved_frame, 2*FRAME_SIZE * sizeof(int));
-  cudaMalloc((void**) &modulated_frame, FRAME_SIZE * sizeof(cuDoubleComplex));
-///  /* invoke the kernel to get some random numbers */
-  for(int ii=0; ii<num_frames;ii++) {
-    sw.start();
-    randoms<<<FRAME_SIZE/128, 128>>>(states, frame);
-    cudaDeviceSynchronize();  sw.stop(); generate_time += sw.count(); sw.start();
-    scramble<<<FRAME_SIZE/128, 128>>>( frame,scrambler_bits);
-    cudaDeviceSynchronize();  sw.stop(); scramble_time += sw.count(); sw.start();
-    encode_s<<<FRAME_SIZE/512, 512>>>(6,FRAME_SIZE, frame,encoded_frame);
-    cudaDeviceSynchronize();  sw.stop(); encode_time += sw.count(); sw.start();
-    interleave<<<FRAME_SIZE/512, 512>>> (encoded_frame,interleaved_frame);
-    cudaDeviceSynchronize();  sw.stop(); interleave_time += sw.count(); sw.start();
-    modulate<<<FRAME_SIZE/512, 512>>> (interleaved_frame,modulated_frame);
-    cudaDeviceSynchronize();  sw.stop(); modulate_time += sw.count();
-  }
-    cout<< " generate_time " << generate_time << endl;
-    cout<< " scramble_time " << scramble_time << endl;
-    cout<< " encode_time " << encode_time << endl;
-    cout<< " interleave_time " << interleave_time << endl;
-    cout<< " modulate_time " << modulate_time << endl;
-  cudaEventRecord(stopevent,0);  //ending timing for inclusive
-   cudaEventSynchronize(stopevent);   
-   cudaEventElapsedTime(&time, startevent, stopevent);
-  cout << "Total time minus fft" << time << endl;
+    cudaMalloc((void**) &scrambler_bits, 128 * sizeof(int));
+    randoms<<<1, 128>>>(states, scrambler_bits);
+    /* allocate an array of unsigned ints on the CPU and GPU */
+    cudaMalloc((void**) &frame, FRAME_SIZE * sizeof(int));
+    cudaMalloc((void**) &encoded_frame, 2*FRAME_SIZE * sizeof(int));
+    cudaMalloc((void**) &interleaved_frame, 2*FRAME_SIZE * sizeof(int));
+    cudaMalloc((void**) &modulated_frame, FRAME_SIZE * sizeof(cuDoubleComplex));
+    /* invoke the kernel to get some random numbers */
+    for(int ii=0; ii<num_frames;ii++) {
+      sw.start();
+      randoms<<<FRAME_SIZE/128, 128>>>(states, frame);
+      cudaDeviceSynchronize();  sw.stop(); generate_time += sw.count(); sw.start();
+      scramble<<<FRAME_SIZE/128, 128>>>( frame,scrambler_bits);
+      cudaDeviceSynchronize();  sw.stop(); scramble_time += sw.count(); sw.start();
+      encode_s<<<FRAME_SIZE/512, 512>>>(6,FRAME_SIZE, frame,encoded_frame);
+      cudaDeviceSynchronize();  sw.stop(); encode_time += sw.count(); sw.start();
+      interleave<<<FRAME_SIZE/512, 512>>> (encoded_frame,interleaved_frame);
+      cudaDeviceSynchronize();  sw.stop(); interleave_time += sw.count(); sw.start();
+      modulate<<<FRAME_SIZE/512, 512>>> (interleaved_frame,modulated_frame);
+      cudaDeviceSynchronize();  sw.stop(); modulate_time += sw.count();
+    }
+      cout<< " generate_time " << generate_time << endl;
+      cout<< " scramble_time " << scramble_time << endl;
+      cout<< " encode_time " << encode_time << endl;
+      cout<< " interleave_time " << interleave_time << endl;
+      cout<< " modulate_time " << modulate_time << endl;
+    cudaEventRecord(stopevent,0);  //ending timing for inclusive
+     cudaEventSynchronize(stopevent);   
+     cudaEventElapsedTime(&time, startevent, stopevent);
+    cout << "Total time minus fft" << time << endl;
 
-  
-  return 0;
+    
+    return 0;
 }
