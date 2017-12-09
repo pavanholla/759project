@@ -38,6 +38,8 @@ openmp_out: ofdm_tx.cpp
 cuda_fft: ofdm_tx.cu
 	module load cuda;nvcc -o cuda_fft -O1 ofdm_tx.cu --ptxas-options=-v --use_fast_math -lcufft -ccbin $(BIN)
 
+problem1a: problem1a.cu
+	module load cuda;nvcc -o problem1a -O1 problem1a.cu --ptxas-options=-v --use_fast_math -lcufft -ccbin $(BIN)
 # TODO: add targets for building executables
 
 .PHONY: clean
