@@ -1,0 +1,7 @@
+ generate_time 1354.32
+ scramble_time 430.425
+ encode_time 3342.97
+ encode_parallel_time 0
+ interleave_time 7975.76
+ modulate_time 2527.52
+ fft_time 12369.4

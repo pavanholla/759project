@@ -9,7 +9,7 @@
 
 cd $SLURM_SUBMIT_DIR
 
-    ./single_thread_out 512
+    ./single_thread_out 512 1
 
 mv job_out single_thread.out
 mv job_err single_thread.err

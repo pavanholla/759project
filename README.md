@@ -13,12 +13,19 @@ The code is set up to build four targets:
 
 For openMP part:
 
-The number of threads is decided through the argument in the user-input and the number of frames is also passed through user input
+The number of threads is decided through the argument in the user-input and the number of frames is 512
 
 For the CUDA part:
 
-It takes in one argument to fix the number of frames for the ofdm calculation
+The number of frames for the ofdm calculation is 512
 
 The number of threads is fixed at 128 per block and the number of blocks is fixed at FRAME_SIZE/128
 
+RUN FILES:
+To run the code on Euler, we need ".sh" files
 
+Following four ".sh" files are generated to run each of the four codes:
+run_single_thread.sh
+run_openmp.sh
+run_cuda_fft_part1.sh
+run_cuda_fft.sh

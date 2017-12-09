@@ -1,0 +1,36 @@
+ generate_time 151.033
+ scramble_time 14.4685
+ encode_time 18.4605
+ interleave_time 14.3562
+ modulate_time 19.8832
+Total time minus fft227.934
+ generate_time 151.712
+ scramble_time 14.4172
+ encode_time 18.447
+ interleave_time 14.3312
+ modulate_time 19.9207
+Total time minus fft227.616
+ generate_time 151.649
+ scramble_time 14.3773
+ encode_time 18.4024
+ interleave_time 14.2991
+ modulate_time 19.8547
+Total time minus fft227.337
+ generate_time 151.516
+ scramble_time 14.3551
+ encode_time 18.3687
+ interleave_time 14.2514
+ modulate_time 19.8318
+Total time minus fft227.105
+ generate_time 151.681
+ scramble_time 14.4879
+ encode_time 18.4596
+ interleave_time 14.3683
+ modulate_time 19.948
+Total time minus fft227.73
+ generate_time 151.58
+ scramble_time 14.3469
+ encode_time 18.3158
+ interleave_time 14.2187
+ modulate_time 19.7873
+Total time minus fft227.01
