@@ -29,3 +29,5 @@ run_single_thread.sh
 run_openmp.sh
 run_cuda_fft_part1.sh
 run_cuda_fft.sh
+
+The ".out" files contain the results for each run.
