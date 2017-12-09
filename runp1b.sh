@@ -9,7 +9,7 @@
 
 cd $SLURM_SUBMIT_DIR
 
-    ./problem1a 
+    ./problem1a 1000
 
 mv job_out problem1c.out
 mv job_err problem1c.err

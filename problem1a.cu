@@ -34,9 +34,9 @@ __global__ void randoms(curandState_t* states, int* numbers) {
   numbers[blockIdx.x*blockDim.x+threadIdx.x] = curand(&states[blockIdx.x*blockDim.x+threadIdx.x]) % 2;
 }
 
-__global__ void scramble(int* numbers) {
+__global__ void scramble(int* numbers,int *scrambler_bits) {
   /* curand works like rand - except that it takes a state as a parameter */
-  numbers[blockIdx.x*blockDim.x+threadIdx.x] ^= (blockIdx.x*blockDim.x+threadIdx.x) % 2;
+  numbers[blockIdx.x*blockDim.x+threadIdx.x] ^=scrambler_bits[ (blockIdx.x*blockDim.x+threadIdx.x) % 128];
 }
 
 
@@ -160,6 +160,7 @@ int main(int argc, char* argv[]) {
     float generate_time= 0, scramble_time=0, encode_time=0, encode_parallel_time=0, interleave_time=0, modulate_time = 0, fft_time=0 ; 
     int frame_size = FRAME_SIZE;
     int *frame;
+    int *scrambler_bits;
     int *encoded_frame;
     int *interleaved_frame;
     cuDoubleComplex *modulated_frame;
@@ -175,6 +176,8 @@ int main(int argc, char* argv[]) {
   /* invoke the GPU to initialize all of the random states */
   init<<<FRAME_SIZE/128, 128>>>(1000, states);
 
+  cudaMalloc((void**) &scrambler_bits, 128 * sizeof(int));
+  randoms<<<1, 128>>>(states, scrambler_bits);
   /* allocate an array of unsigned ints on the CPU and GPU */
   cudaMalloc((void**) &frame, FRAME_SIZE * sizeof(int));
   cudaMalloc((void**) &encoded_frame, 2*FRAME_SIZE * sizeof(int));
@@ -185,7 +188,7 @@ int main(int argc, char* argv[]) {
     sw.start();
     randoms<<<FRAME_SIZE/128, 128>>>(states, frame);
     cudaDeviceSynchronize();  sw.stop(); generate_time += sw.count(); sw.start();
-    scramble<<<FRAME_SIZE/128, 128>>>( frame);
+    scramble<<<FRAME_SIZE/128, 128>>>( frame,scrambler_bits);
     cudaDeviceSynchronize();  sw.stop(); scramble_time += sw.count(); sw.start();
     encode_s<<<FRAME_SIZE/512, 512>>>(6,FRAME_SIZE, frame,encoded_frame);
     cudaDeviceSynchronize();  sw.stop(); encode_time += sw.count(); sw.start();
